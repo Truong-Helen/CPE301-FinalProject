@@ -119,7 +119,7 @@ void loop() {
   */
   
 
-  /* example code for RTC module data printing to LCD display
+  // example code for RTC module data printing to LCD display
   DateTime now = rtc.now();
 
   lcd.setCursor(0, 0);
@@ -140,7 +140,7 @@ void loop() {
   //lcd.println();
 
   //Serial.println();
-  */  
+   
   
   delay(3000);
 }

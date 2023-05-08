@@ -90,6 +90,7 @@ enum State {
   ERROR,
   RUNNING        
 };
+enum State state = IDLE;
 
 void setup() {
   Serial.begin(9600);
@@ -149,9 +150,11 @@ void loop() {
     StopButton();
   }
   */
-  //changeState(DISABLED);
+  if (state != DISABLED){
+    changeState(DISABLED);
+  }  
   //displayTempAndHumidity(); 
-  updateScreen();
+  //updateScreen();
   //*port_c |= (1 << yellowLED);
   //*port_c |= (1 << greenLED);  
   //*port_c |= (1 << redLED); 
@@ -162,6 +165,7 @@ void loop() {
 }
 
 void changeState(enum State newState) {
+  // turn all LEDs off
   *port_c &= ~(1 << yellowLED);
   *port_c &= ~(1 << greenLED);  
   *port_c &= ~(1 << redLED); 
@@ -169,8 +173,10 @@ void changeState(enum State newState) {
 
   switch(newState) {
     case DISABLED:
-      lcd.setCursor(0, 1);
-      lcd.print("   DISABLED   ");
+      state = DISABLED;
+      lcd.setCursor(0, 0);
+      lcd.print("    DISABLED    ");
+      *port_c |= (1 << yellowLED); // turn LED on
       break;
 
   }

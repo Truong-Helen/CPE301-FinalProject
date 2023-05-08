@@ -65,8 +65,8 @@ dht DHT;
 #define DHT11_PIN 7 //PE7 // macro for pin 7 in <pins_arduino.h>
 
 // water sensor
-#define POWER_PIN 6
-#define SIGNAL_PIN A5
+#define POWER_PIN PH3 //6
+#define SIGNAL_PIN PF5 //A5
 
 #include <Stepper.h> //Includes the Arduino Stepper Library
 
@@ -111,16 +111,18 @@ enum State {
 enum State state = IDLE;
 
 int waterThreshold = 100;
-int tempThreshold = 20;
+int waterLevel;
+int tempThreshold = 25;
+int temp;
 
 void setup() {
-  Serial.begin(9600);
+  U0init(9600);
   
-  
+  adc_init();
 
   // water sensor
-  pinMode (POWER_PIN, OUTPUT); // configure D8 pin as an OUTPUT
-  digitalWrite (POWER_PIN, LOW); // turn the sensor OFF
+  *ddr_h |= (1 << POWER_PIN); //pinMode (POWER_PIN, OUTPUT); // configure D6 pin as an OUTPUT
+  *port_h &= ~(1 << POWER_PIN); //digitalWrite (POWER_PIN, LOW); // turn the sensor OFF
 
   // DC motor
   //*ddr_e |= 0x08;//0b00001000; //pinMode(5, OUTPUT); //PE3 speedpin
@@ -159,11 +161,9 @@ void setup() {
   
   changeState(IDLE);
   *port_a |= (1 << startStopButton); // enables pullup resistor for startStopButton
+  
 }
 
-int buttonPushCounter = 0;
-int buttonState = 0;
-int lastButtonState = 0;
 
 void loop() {
   /*
@@ -186,12 +186,16 @@ void loop() {
   }
   */
     
+  temp = getTemp();
+  waterLevel = getWaterLevel();  
+  
   if (*pin_a & (1 << startStopButton)) { // check if button is pressed
         
         
     if (state == DISABLED) {
       //*port_c &= ~(1 << yellowLED);
       state = IDLE;
+      Timestamp();
     } else {
       //*port_c |= (1 << yellowLED);
       state = DISABLED;
@@ -199,7 +203,34 @@ void loop() {
     changeState(state);
   }
   
+  if (state == ERROR) {
+    if (*pin_a & (1 << resetButton)) {
+      state = IDLE;
+      Timestamp();      
+    }
+  } else if (state == IDLE) {
+    if (temp > tempThreshold) {
+      state = RUNNING;
+    }
+    if (waterLevel <= waterThreshold) {
+      state = ERROR;
+    }   
+  } else if (state == RUNNING) {
+    if (temp <= tempThreshold) {
+      state = IDLE;
+      Timestamp();
+    }
+    if (waterLevel < waterThreshold) {
+      state = ERROR;
+    }
+  }
+  changeState(state);
+
+  
+  
   //displayTempAndHumidity(); 
+  //my_delay(100000000000000);
+  //delay(3000);
   //updateScreen();
   //*port_c |= (1 << yellowLED);
   //*port_c |= (1 << greenLED);  
@@ -230,16 +261,35 @@ void changeState(enum State newState) {
     case IDLE: {
       state = IDLE;
       *port_c |= (1 << greenLED);
-      timestamp();
+      //Timestamp();
+      displayTempAndHumidity(); 
+      updateScreen();
+      break;      
+    }
+    case ERROR: {
+      state = ERROR;
+      *port_c |= (1 << redLED);
+      lcd.setCursor(0, 0);
+      lcd.print("ERROR:          ");
+      lcd.setCursor(0, 1);
+      lcd.print("Water Too Low   ");            
+      //displayTempAndHumidity(); 
+      //updateScreen();
+      break;
+    }
+    case RUNNING: {
+      state = RUNNING;
+      *port_a |= (1 << blueLED);
       displayTempAndHumidity(); 
       updateScreen();      
+      break;
     }
 
   }
 }
 
 // taken from example in library
-void timestamp() {
+void Timestamp() {
   DateTime time = rtc.now();
   Serial.println(String("DateTime::TIMESTAMP_FULL:\t")+time.timestamp(DateTime::TIMESTAMP_FULL)+" : IDLE State");
 }
@@ -254,9 +304,23 @@ void StopButton() {
   //digitalWrite(stopButton, LOW);
 }
 
-void displayTempAndHumidity() {
-  
+int getWaterLevel() {
+  *port_h |= (1 << POWER_PIN); //digitalWrite (POWER_PIN, HIGH); // turn the sensor ON
+  //delay(10); // wait 10 milliseconds
+  value = adc_read (5); // read the analog value from sensor
+  *port_h &= ~(1 << POWER_PIN); //digitalWrite (POWER_PIN, LOW); // turn the sensor OFF
+  //Serial.print("Sensor value: " );
+  //Serial.println (value);
+  //delay(1000);
+  return value;
+}
 
+int getTemp() {
+  int chk = DHT.read11(DHT11_PIN);
+  return DHT.temperature;
+}
+
+void displayTempAndHumidity() {
   
   int chk = DHT.read11(DHT11_PIN);
   lcd.setCursor(0, 0);
@@ -266,6 +330,7 @@ void displayTempAndHumidity() {
   lcd.setCursor(0, 1);
   lcd.print("Humidity = ");
   lcd.print(DHT.humidity);  
+  
   /*
   int chk = DHT.read11(DHT11_PIN);
   
@@ -277,7 +342,10 @@ void displayTempAndHumidity() {
 }
 
 void updateScreen() { 
-
+  //DateTime time = rtc.now();  
+  
+  
+  
   unsigned long currentTime = millis();
   static unsigned long previousTime = 0;
   const unsigned long interval = 60000;  // Every minute
@@ -285,6 +353,8 @@ void updateScreen() {
     previousTime += interval;
     displayTempAndHumidity();
   }
+  
+
 }
 
 // taken from lab 7 --> ADC
@@ -362,33 +432,27 @@ void U0putchar(unsigned char U0pdata)
   *myUDR0 = U0pdata;
 }
 
-// taken from lab 4 --> Timers
-void my_delay(unsigned int freq, volatile unsigned char* port, int portIndex)
+// taken from lab 3 --> GPIO
+void my_delay(unsigned int freq)
 {
-
-  double period = 1.0/double(freq); // calc period
-  double half_period = period/ 2.0f; // 50% duty cycle
-  double clk_period = 0.0000000625; // clock period def
-  unsigned int ticks = half_period / clk_period; // calc ticks
-
-  while (freq > 0) {
-
-    *port |= (1 << portIndex);  
-
-    *myTCCR1B &= 0xF8; // stop the timer
-    *myTCNT1 = (unsigned int) (65536 - ticks); // set the counts
-    *myTCCR1B |= 0b00000001; // start the timer 
-    while((*myTIFR1 & 0x01)==0); // wait for overflow // 0b 0000 0000
-    *myTCCR1B &= 0xF8;   // stop the timer // 0b 0000 0000
-    *myTIFR1 |= 0x01; // reset TOV
-
-    *port &= ~(1 << portIndex);
-
-    *myTCCR1B &= 0xF8; // stop the timer
-    *myTCNT1 = (unsigned int) (65536 - ticks); // set the counts
-    * myTCCR1B |= 0b00000001; // start the timer 
-    while((*myTIFR1 & 0x01)==0); // wait for overflow // 0b 0000 0000
-    *myTCCR1B &= 0xF8;   // stop the timer // 0b 0000 0000
-    *myTIFR1 |= 0x01; // reset TOV
-  }
+  // calc period
+  double period = 1.0/double(freq);
+  // 50% duty cycle
+  double half_period = period/ 2.0f;
+  // clock period def
+  double clk_period = 0.0000000625;
+  // calc ticks
+  unsigned int ticks = half_period / clk_period;
+  // stop the timer
+  *myTCCR1B &= 0xF8;
+  // set the counts
+  *myTCNT1 = (unsigned int) (65536 - ticks);
+  // start the timer
+  * myTCCR1B |= 0b00000001;
+  // wait for overflow
+  while((*myTIFR1 & 0x01)==0); // 0b 0000 0000
+  // stop the timer
+  *myTCCR1B &= 0xF8;   // 0b 0000 0000
+  // reset TOV           
+  *myTIFR1 |= 0x01;
 }

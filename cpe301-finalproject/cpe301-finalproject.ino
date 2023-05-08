@@ -18,6 +18,7 @@ volatile unsigned char* my_ADCSRB = (unsigned char*) 0x7B;
 volatile unsigned char* my_ADCSRA = (unsigned char*) 0x7A;
 volatile unsigned int* my_ADC_DATA = (unsigned int*) 0x78;
 
+// taken from lab 4 --> Timers
 volatile unsigned char *myTCCR1A = (unsigned char *) 0x80; // Timer/Counter 1 Control Register A
 volatile unsigned char *myTCCR1B = (unsigned char *) 0x81; // Timer/Counter 1 Control Register B
 volatile unsigned char *myTCCR1C = (unsigned char *) 0x82; // Timer/Counter 1 Control Register C
@@ -98,8 +99,8 @@ char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursd
 #define blueLED PA7 //29
 
 // buttons
-#define startStopButton PE3 //25
-#define resetButton PE5 //23
+#define startStopButton PA3 //25
+#define resetButton PA1 //23
 
 enum State {
   DISABLED,
@@ -109,9 +110,14 @@ enum State {
 };
 enum State state = IDLE;
 
+int waterThreshold = 100;
+int tempThreshold = 20;
+
 void setup() {
   Serial.begin(9600);
   
+  
+
   // water sensor
   pinMode (POWER_PIN, OUTPUT); // configure D8 pin as an OUTPUT
   digitalWrite (POWER_PIN, LOW); // turn the sensor OFF
@@ -151,7 +157,13 @@ void setup() {
   *ddr_a &= ~(1 << startStopButton); //pinMode(startStopButton, INPUT);
   *ddr_a &= ~(1 << resetButton); //pinMode(resetButton, INPUT);  
   
+  changeState(IDLE);
+  *port_a |= (1 << startStopButton); // enables pullup resistor for startStopButton
 }
+
+int buttonPushCounter = 0;
+int buttonState = 0;
+int lastButtonState = 0;
 
 void loop() {
   /*
@@ -167,9 +179,26 @@ void loop() {
     StopButton();
   }
   */
-  if (state != DISABLED){
-    changeState(DISABLED);
-  }  
+  /*
+  if (state == DISABLED) {
+    state = IDLE;
+    changeState(IDLE);
+  }
+  */
+    
+  if (*pin_a & (1 << startStopButton)) { // check if button is pressed
+        
+        
+    if (state == DISABLED) {
+      //*port_c &= ~(1 << yellowLED);
+      state = IDLE;
+    } else {
+      //*port_c |= (1 << yellowLED);
+      state = DISABLED;
+    }
+    changeState(state);
+  }
+  
   //displayTempAndHumidity(); 
   //updateScreen();
   //*port_c |= (1 << yellowLED);
@@ -189,14 +218,30 @@ void changeState(enum State newState) {
   *port_a &= ~(1 << blueLED); 
 
   switch(newState) {
-    case DISABLED:
+    case DISABLED: {
       state = DISABLED;
+      *port_c |= (1 << yellowLED); // turn LED on
       lcd.setCursor(0, 0);
       lcd.print("    DISABLED    ");
-      *port_c |= (1 << yellowLED); // turn LED on
+      lcd.setCursor(0, 1);
+      lcd.print("                    ");            
       break;
+    }
+    case IDLE: {
+      state = IDLE;
+      *port_c |= (1 << greenLED);
+      timestamp();
+      displayTempAndHumidity(); 
+      updateScreen();      
+    }
 
   }
+}
+
+// taken from example in library
+void timestamp() {
+  DateTime time = rtc.now();
+  Serial.println(String("DateTime::TIMESTAMP_FULL:\t")+time.timestamp(DateTime::TIMESTAMP_FULL)+" : IDLE State");
 }
 
 void StopButton() {

@@ -62,26 +62,24 @@ volatile unsigned char* pin_c  = (unsigned char*) 0x26;
 // 3pin DHT11
 #include <dht.h> //install the DHTLib library
 dht DHT;
-#define DHT11_PIN 7 //PE7 // macro for pin 7 in <pins_arduino.h>
+#define DHT11_PIN PH7 // pin 7
 
 // water sensor
-#define POWER_PIN PH3 //6
-#define SIGNAL_PIN PF5 //A5
-
-#include <Stepper.h> //Includes the Arduino Stepper Library
+#define POWER_PIN PH3 // pin 6
+#define SIGNAL_PIN PF5 // pin A5
+int value = 0; // variable to store the sensor value
 
 // step motor
+#include <Stepper.h> //Includes the Arduino Stepper Library
 const int stepsPerRevolution = 2038; // Defines the number of steps per rotation
 Stepper myStepper = Stepper(stepsPerRevolution, 8, 10, 9, 11); // Creates an instance of stepper class
   // Pins entered in sequence IN1-IN3-IN2-IN4 for proper step sequence
 
-// DC motor
-#define speedPin PE3 //5
-#define dir1 PG5 //4
-#define dir2 PE5 //3
+// DC motor (fan)
+#define speedPin PE3 // pin 5
+#define dir1 PG5 // pin 4
+#define dir2 PE5 // pin 3
 bool fanRunning = false;
-
-int value = 0; // variable to store the sensor value
 
 // LCD display
 #include <LiquidCrystal.h>
@@ -124,12 +122,12 @@ void setup() {
 
   // water sensor
   *ddr_h |= (1 << POWER_PIN); //pinMode (POWER_PIN, OUTPUT); // configure D6 pin as an OUTPUT
-  *port_h &= ~(1 << POWER_PIN); //digitalWrite (POWER_PIN, LOW); // turn the sensor OFF
+  *port_h &= ~(1 << POWER_PIN); //digitalWrite (POWER_PIN, LOW); // turn the sensor OFF  
 
   // DC motor
-  *ddr_e |= (1 << speedPin);//0b00001000; //pinMode(5, OUTPUT); //PE3 speedpin
-  *ddr_g |= (1 << dir1);//0b00100000; //pinMode(4, OUTPUT); //PG5 dir1
-  *ddr_e |= (1 << dir2);//0b00100000; //pinMode(3, OUTPUT); //PE5 dir2
+  *ddr_e |= (1 << speedPin); //pinMode(5, OUTPUT); //PE3 speedpin
+  *ddr_g |= (1 << dir1); //pinMode(4, OUTPUT); //PG5 dir1
+  *ddr_e |= (1 << dir2); //pinMode(3, OUTPUT); //PE5 dir2
 
   *port_g &= ~(1 << dir1); //digitalWrite(dir1, LOW);
   *port_e |= (1 << dir2); //digitalWrite(dir2, HIGH);
@@ -164,14 +162,14 @@ void setup() {
   *ddr_a &= ~(1 << startStopButton); //pinMode(startStopButton, INPUT);
   *ddr_a &= ~(1 << resetButton); //pinMode(resetButton, INPUT);  
   
-  //changeState(IDLE);
+  changeState(IDLE);
   *port_a |= (1 << startStopButton); // enables pullup resistor for startStopButton
   
 }
 
 
 void loop() {
-
+  
   temp = getTemp();
   waterLevel = getWaterLevel();  
   
@@ -182,7 +180,7 @@ void loop() {
     }
     if (state == DISABLED) {
       state = IDLE;
-      Timestamp();
+      Timestamp("IDLE State");
     } else {
       state = DISABLED;
     }
@@ -192,24 +190,32 @@ void loop() {
   if (state == ERROR) {
     if (*pin_a & (1 << resetButton)) {
       state = IDLE;
-      Timestamp();      
+      Timestamp("IDLE State");      
     }
   } else if (state == IDLE) {
     if (temp > tempThreshold) {
       state = RUNNING;
+      fanOn();
     }
     if (waterLevel <= waterThreshold) {
       state = ERROR;
+      if(fanRunning) {
+        fanOff();
+      } 
     }   
   } else if (state == RUNNING) {
     if (temp <= tempThreshold) {
-      fanOff();
       state = IDLE;
-      Timestamp();
+      Timestamp("IDLE State");
+      if(fanRunning) {
+        fanOff();
+      }
     }
     if (waterLevel < waterThreshold) {
-      fanOff();
       state = ERROR;
+      if(fanRunning) {
+        fanOff();
+      }
     }
   }
   changeState(state);
@@ -242,16 +248,25 @@ void loop() {
 //  return false;
 //}
 
+// turns on fan motor
 void fanOn() {
+  // sets speedPin to HIGH
   *port_e |= (1 << speedPin); //analogWrite(5, 255);
   fanRunning = true;
+
+  Timestamp("Fan Motor turned ON");  
 }
 
+// turns off fan motor
 void fanOff() {
+  // sets speedPin to LOW
   *port_e &= ~(1 << speedPin);
   fanRunning = false;
+
+  Timestamp("Fan Motor turned OFF");
 }
 
+// function to change state and do all the operations for that state
 void changeState(enum State newState) {
   // turn all LEDs off
   *port_c &= ~(1 << yellowLED);
@@ -261,8 +276,7 @@ void changeState(enum State newState) {
 
   switch(newState) {
     case DISABLED: {
-      state = DISABLED;
-      *port_c |= (1 << yellowLED); // turn LED on
+      *port_c |= (1 << yellowLED); // turn yellow LED on
       lcd.setCursor(0, 0);
       lcd.print("    DISABLED    ");
       lcd.setCursor(0, 1);
@@ -270,53 +284,43 @@ void changeState(enum State newState) {
       break;
     }
     case IDLE: {
-      state = IDLE;
-      *port_c |= (1 << greenLED);
+      *port_c |= (1 << greenLED); // turn green LED on
       //Timestamp();
       displayTempAndHumidity(); 
-      updateScreen();
       break;      
     }
     case ERROR: {
-      state = ERROR;
-      *port_c |= (1 << redLED);
+      *port_c |= (1 << redLED); // turn red LED on
       lcd.setCursor(0, 0);
       lcd.print("   Water level      ");
       lcd.setCursor(0, 1);
-      lcd.print("   is too low       ");    
-      fanOff();        
+      lcd.print("   is too low       ");          
       //displayTempAndHumidity(); 
-      //updateScreen();
       break;
     }
     case RUNNING: {
-      state = RUNNING;
-      *port_a |= (1 << blueLED);
-      fanOn();
-      displayTempAndHumidity(); 
-      updateScreen();      
+      *port_a |= (1 << blueLED); // turn blue LED on
+      displayTempAndHumidity();     
       break;
     }
 
   }
 }
 
-// taken from example in library
-void Timestamp() {
-  DateTime time = rtc.now();
-  Serial.println(String("DateTime::TIMESTAMP_FULL:\t")+time.timestamp(DateTime::TIMESTAMP_FULL)+" : IDLE State");
-}
-
-void StopButton() {
-  if (digitalRead(dir2) == HIGH) {
-    Serial.println("stopButton pressed");    
-    digitalWrite(dir2, LOW);
-    delay(5000);
-    
+// function using the UART function to print out a full string
+void my_println(String word) {
+  for (char c : word) { // "for each character in word"
+    U0putchar(c);    
   }
-  //digitalWrite(stopButton, LOW);
 }
 
+// time.timestamp() taken from example in library
+void Timestamp(String subject) {
+  DateTime time = rtc.now();
+  my_println(time.timestamp(DateTime::TIMESTAMP_FULL)+" : "+subject+"\n");
+}
+
+// based on code from CPE301_Sensors slides
 int getWaterLevel() {
   *port_h |= (1 << POWER_PIN); //digitalWrite (POWER_PIN, HIGH); // turn the sensor ON
   //delay(10); // wait 10 milliseconds
@@ -333,6 +337,7 @@ int getTemp() {
   return DHT.temperature;
 }
 
+// based on code from CPE301_Sensors slides
 void displayTempAndHumidity() {
   
   int chk = DHT.read11(DHT11_PIN);
@@ -354,11 +359,9 @@ void displayTempAndHumidity() {
   */
 }
 
+/*
 void updateScreen() { 
   //DateTime time = rtc.now();  
-  
-  
-  
   unsigned long currentTime = millis();
   static unsigned long previousTime = 0;
   const unsigned long interval = 60000;  // Every minute
@@ -366,10 +369,9 @@ void updateScreen() {
     previousTime += interval;
     displayTempAndHumidity();
   }
-  
-
 }
-
+*/
+// looked at Lecture-14_Interrupt slides and example looked similar to this
 ISR(TIMER1_0VF_vect) {
   startStopButtonPressed = true;
 }

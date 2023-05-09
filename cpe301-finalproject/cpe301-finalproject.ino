@@ -91,14 +91,15 @@ RTC_DS1307 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 // LEDS
-#define yellowLED PC2 //35
-#define greenLED PC4 //33
-#define redLED PC6 //31
-#define blueLED PA7 //29
+#define yellowLED PC2 // pin 35
+#define greenLED PC4 // pin 33
+#define redLED PC6 // pin 31
+#define blueLED PA7 // pin 29
 
 // buttons
-#define startStopButton PA3 //25
-#define resetButton PA1 //23
+#define resetButton PA1 // pin 23
+#define startStopButton PA3 // pin 25
+#define ventButton PA5 // pin 27
 
 enum State {
   DISABLED,
@@ -160,7 +161,8 @@ void setup() {
   
   // buttons
   *ddr_a &= ~(1 << startStopButton); //pinMode(startStopButton, INPUT);
-  *ddr_a &= ~(1 << resetButton); //pinMode(resetButton, INPUT);  
+  *ddr_a &= ~(1 << resetButton); //pinMode(resetButton, INPUT);
+  *ddr_a &= ~(1 << ventButton); //pinMode(ventButton, INPUT);  
   
   changeState(IDLE);
   *port_a |= (1 << startStopButton); // enables pullup resistor for startStopButton
@@ -168,10 +170,7 @@ void setup() {
 }
 
 
-void loop() {
-  
-  temp = getTemp();
-  waterLevel = getWaterLevel();  
+void loop() {  
   
   if (*pin_a & (1 << startStopButton)) { // check if button is pressed
     startStopButtonPressed = true;
@@ -186,39 +185,47 @@ void loop() {
     }
     changeState(state);
   }
-  
-  if (state == ERROR) {
-    if (*pin_a & (1 << resetButton)) {
-      state = IDLE;
-      Timestamp("IDLE State");      
-    }
-  } else if (state == IDLE) {
-    if (temp > tempThreshold) {
-      state = RUNNING;
-      fanOn();
-    }
-    if (waterLevel <= waterThreshold) {
-      state = ERROR;
-      if(fanRunning) {
-        fanOff();
-      } 
-    }   
-  } else if (state == RUNNING) {
-    if (temp <= tempThreshold) {
-      state = IDLE;
-      Timestamp("IDLE State");
-      if(fanRunning) {
-        fanOff();
+  if (state != DISABLED) {
+    
+    // can only monitor temperature and water level in all states except DISABLED
+    temp = getTemp();
+    waterLevel = getWaterLevel();
+    
+    
+
+    if (state == ERROR) {
+      if (*pin_a & (1 << resetButton)) { // check if button is pressed
+        state = IDLE;
+        Timestamp("IDLE State");      
+      }
+    } else if (state == IDLE) {
+      if (temp > tempThreshold) {
+        state = RUNNING;
+        fanOn();
+      }
+      if (waterLevel <= waterThreshold) {
+        state = ERROR;
+        if(fanRunning) {
+          fanOff();
+        } 
+      }   
+    } else if (state == RUNNING) {
+      if (temp <= tempThreshold) {
+        state = IDLE;
+        Timestamp("IDLE State");
+        if(fanRunning) {
+          fanOff();
+        }
+      }
+      if (waterLevel < waterThreshold) {
+        state = ERROR;
+        if(fanRunning) {
+          fanOff();
+        }
       }
     }
-    if (waterLevel < waterThreshold) {
-      state = ERROR;
-      if(fanRunning) {
-        fanOff();
-      }
-    }
+    changeState(state);
   }
-  changeState(state);
   
   //displayTempAndHumidity(); 
   //my_delay(100000000000000);
@@ -287,6 +294,7 @@ void changeState(enum State newState) {
       *port_c |= (1 << greenLED); // turn green LED on
       //Timestamp();
       displayTempAndHumidity(); 
+      changeVentAngle();
       break;      
     }
     case ERROR: {
@@ -294,17 +302,27 @@ void changeState(enum State newState) {
       lcd.setCursor(0, 0);
       lcd.print("   Water level      ");
       lcd.setCursor(0, 1);
-      lcd.print("   is too low       ");          
+      lcd.print("   is too low       "); 
+      changeVentAngle();         
       //displayTempAndHumidity(); 
       break;
     }
     case RUNNING: {
       *port_a |= (1 << blueLED); // turn blue LED on
-      displayTempAndHumidity();     
+      displayTempAndHumidity();    
+      changeVentAngle();
       break;
     }
 
   }
+}
+
+void changeVentAngle() {
+  // if button is held down, 'vent' turns     
+  myStepper.setSpeed(5);  
+  if (*pin_a & (1 << ventButton)) { // check if button is pressed
+    myStepper.step(5);
+  }  
 }
 
 // function using the UART function to print out a full string

@@ -228,24 +228,6 @@ void loop() {
    
 }
 
-// turns on fan motor
-void fanOn() {
-  // sets speedPin to HIGH
-  *port_e |= (1 << speedPin); //analogWrite(5, 255);
-  fanRunning = true;
-
-  Timestamp("Fan Motor turned ON");  
-}
-
-// turns off fan motor
-void fanOff() {
-  // sets speedPin to LOW
-  *port_e &= ~(1 << speedPin);
-  fanRunning = false;
-
-  Timestamp("Fan Motor turned OFF");
-}
-
 // function to change state and do all the operations for that state
 void changeState(enum State newState) {
   // turn all LEDs off
@@ -288,6 +270,24 @@ void changeState(enum State newState) {
     }
 
   }
+}
+
+// turns on fan motor
+void fanOn() {
+  // sets speedPin to HIGH
+  *port_e |= (1 << speedPin); //analogWrite(5, 255);
+  fanRunning = true;
+
+  Timestamp("Fan Motor turned ON");  
+}
+
+// turns off fan motor
+void fanOff() {
+  // sets speedPin to LOW
+  *port_e &= ~(1 << speedPin);
+  fanRunning = false;
+
+  Timestamp("Fan Motor turned OFF");
 }
 
 void changeVentAngle() {

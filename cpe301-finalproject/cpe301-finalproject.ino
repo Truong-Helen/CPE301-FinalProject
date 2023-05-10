@@ -111,7 +111,7 @@ enum State state = IDLE;
 
 int waterThreshold = 100;
 int waterLevel;
-int tempThreshold = 23;
+int tempThreshold = 24;
 int temp;
 
 bool startStopButtonPressed = false;
@@ -143,13 +143,13 @@ void setup() {
   #endif
 
     if (! rtc.begin()) {
-      Serial.println("Couldn't find RTC");
+      my_println("Couldn't find RTC\n");
       Serial.flush();
       while (1) delay(10);
     }
 
     if (! rtc.isrunning()) {
-      Serial.println("RTC is NOT running, let's set the time!");
+      my_println("RTC is NOT running, let's set the time!");
       rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     }
 
@@ -164,13 +164,14 @@ void setup() {
   *ddr_a &= ~(1 << resetButton); //pinMode(resetButton, INPUT);
   *ddr_a &= ~(1 << ventButton); //pinMode(ventButton, INPUT);  
   
-  changeState(IDLE);
+  changeState(IDLE); // makes first state IDLE so that 
   *port_a |= (1 << startStopButton); // enables pullup resistor for startStopButton
   
 }
 
 
 void loop() {  
+
   
   if (*pin_a & (1 << startStopButton)) { // check if button is pressed
     startStopButtonPressed = true;
@@ -190,8 +191,6 @@ void loop() {
     // can only monitor temperature and water level in all states except DISABLED
     temp = getTemp();
     waterLevel = getWaterLevel();
-    
-    
 
     if (state == ERROR) {
       if (*pin_a & (1 << resetButton)) { // check if button is pressed
@@ -226,34 +225,8 @@ void loop() {
     }
     changeState(state);
   }
-  
-  //displayTempAndHumidity(); 
-  //my_delay(100000000000000);
-  //delay(3000);
-  //updateScreen();
-  //*port_c |= (1 << yellowLED);
-  //Serial.println("on");
-  //*port_c |= (1 << greenLED);  
-  //*port_c |= (1 << redLED); 
-  //*port_a |= (1 << blueLED); 
-  //my_delay(150);
-  //if (minutePassed()) {
-  //  *port_c &= ~(1 << yellowLED);
-  //  Serial.println("off");
-  //}
-  
-  //delay(1000);  
+   
 }
-//DateTime now = rtc.now();
-//int ogMin = now.minute();
-//bool minutePassed() {
-  
-//  if (now == future)
-//  {
-//    return true;
-//  } 
-//  return false;
-//}
 
 // turns on fan motor
 void fanOn() {
@@ -341,12 +314,8 @@ void Timestamp(String subject) {
 // based on code from CPE301_Sensors slides
 int getWaterLevel() {
   *port_h |= (1 << POWER_PIN); //digitalWrite (POWER_PIN, HIGH); // turn the sensor ON
-  //delay(10); // wait 10 milliseconds
   value = adc_read (5); // read the analog value from sensor
   *port_h &= ~(1 << POWER_PIN); //digitalWrite (POWER_PIN, LOW); // turn the sensor OFF
-  //Serial.print("Sensor value: " );
-  //Serial.println (value);
-  //delay(1000);
   return value;
 }
 
@@ -365,30 +334,11 @@ void displayTempAndHumidity() {
   lcd.print("  ");
   lcd.setCursor(0, 1);
   lcd.print("Humidity = ");
-  lcd.print(DHT.humidity);  
-  
-  /*
-  int chk = DHT.read11(DHT11_PIN);
-  
-  Serial.print("    Temp = ");
-  Serial.println(DHT.temperature);
-  Serial.print("Humidity = ");
-  Serial.println(DHT.humidity);
-  */
+  lcd.print(DHT.humidity); 
+ 
 }
 
-/*
-void updateScreen() { 
-  //DateTime time = rtc.now();  
-  unsigned long currentTime = millis();
-  static unsigned long previousTime = 0;
-  const unsigned long interval = 60000;  // Every minute
-  if (currentTime - previousTime >= interval) {
-    previousTime += interval;
-    displayTempAndHumidity();
-  }
-}
-*/
+
 // looked at Lecture-14_Interrupt slides and example looked similar to this
 ISR(TIMER1_0VF_vect) {
   startStopButtonPressed = true;
@@ -471,7 +421,7 @@ void U0putchar(unsigned char U0pdata)
 
 // taken from lab 3 --> GPIO
 void my_delay(unsigned int freq)
-{
+{  
   // calc period
   double period = 1.0/double(freq);
   // 50% duty cycle
@@ -493,3 +443,4 @@ void my_delay(unsigned int freq)
   // reset TOV           
   *myTIFR1 |= 0x01;
 }
+
